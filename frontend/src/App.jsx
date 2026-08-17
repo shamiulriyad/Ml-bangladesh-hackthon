@@ -1,31 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useCamera } from './useCamera'
-import { speak } from './speech'
+import { speak, stopSpeaking, isSpeechSupported } from './speech'
+import { CAMERA_MESSAGES, UI_ERROR_MESSAGE, BACKEND_FALLBACK_TEXT, TEXT_DETECTED_MARKER, isHazardText } from './copy'
+import Hero from './components/Hero'
+import VisionCamera from './components/VisionCamera'
+import VisionToggleButton from './components/VisionToggleButton'
+import NarrationCard from './components/NarrationCard'
 
-const FALLBACK_MESSAGE = 'দুঃখিত, এই মুহূর্তে বুঝতে পারছি না। আবার চেষ্টা করুন।'
 const REQUEST_TIMEOUT_MS = 8000
+// Not real-time video analysis (that needs a streaming API) — instead, a fresh frame is
+// captured and analyzed on this cadence for as long as the loop is active, so the
+// experience still reads as "continuous" without a capture button.
+const LOOP_PAUSE_MS = 2500
+const LOOP_ERROR_PAUSE_MS = 4000
+const CAMERA_NOT_READY_POLL_MS = 1000
 
-const MODES = {
-  scene: { label: 'দৃশ্য বর্ণনা', full: 'দৃশ্য বর্ণনা করুন' },
-  text: { label: 'লেখা পড়ুন', full: 'লেখা পড়ুন' }
-}
-
-const CAMERA_MESSAGES = {
-  requesting: 'ক্যামেরা চালু হচ্ছে...',
-  denied: 'ক্যামেরার অনুমতি দেওয়া হয়নি। অনুমতি দিয়ে আবার চেষ্টা করুন।',
-  unsupported: 'এই ব্রাউজারে ক্যামেরা সমর্থিত নয়।',
-  error: 'ক্যামেরা চালু করা যায়নি। আবার চেষ্টা করুন।',
-  off: 'ক্যামেরা বন্ধ আছে।'
-}
-
-async function describeImage(imageBase64, mode) {
+async function describeImage(imageBase64) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
     const res = await fetch('/api/describe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageBase64, mode }),
+      body: JSON.stringify({ imageBase64 }),
       signal: controller.signal
     })
     if (!res.ok) throw new Error(`request-failed-${res.status}`)
@@ -37,11 +34,21 @@ async function describeImage(imageBase64, mode) {
 }
 
 export default function App() {
-  const { videoRef, status: cameraStatus, capture, retry: retryCamera, turnOff: turnOffCamera, turnOn: turnOnCamera } = useCamera()
-  const [mode, setMode] = useState('scene')
-  const [analysisStatus, setAnalysisStatus] = useState('idle') // idle | loading | result | error
-  const [resultText, setResultText] = useState('')
-  const lastImageRef = useRef(null)
+  const { videoRef, status: cameraStatus, capture, retry: retryCamera } = useCamera()
+
+  const [isActive, setIsActive] = useState(false)
+  const [narration, setNarration] = useState(null) // { text, variant, textDetected }
+  const [voiceState, setVoiceState] = useState('idle') // idle | playing
+  const [voiceUnsupported] = useState(() => !isSpeechSupported())
+
+  const isActiveRef = useRef(false)
+  const cameraStatusRef = useRef(cameraStatus)
+  const lastTextRef = useRef(null)
+  const loopTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    cameraStatusRef.current = cameraStatus
+  }, [cameraStatus])
 
   useEffect(() => {
     if (cameraStatus in CAMERA_MESSAGES) {
@@ -49,132 +56,107 @@ export default function App() {
     }
   }, [cameraStatus])
 
-  const runAnalysis = useCallback(async (imageBase64, selectedMode) => {
-    setAnalysisStatus('loading')
-    setResultText('')
-    try {
-      const text = await describeImage(imageBase64, selectedMode)
-      // The backend itself falls back to FALLBACK_MESSAGE (still HTTP 200) when Gemini
-      // fails server-side, so match on content too, not just network-level failures.
-      setResultText(text)
-      setAnalysisStatus(text === FALLBACK_MESSAGE ? 'error' : 'result')
-      speak(text)
-    } catch (err) {
-      setResultText(FALLBACK_MESSAGE)
-      setAnalysisStatus('error')
-      speak(FALLBACK_MESSAGE)
-    }
+  useEffect(
+    () => () => {
+      isActiveRef.current = false
+      clearTimeout(loopTimeoutRef.current)
+    },
+    []
+  )
+
+  const speakResult = useCallback((text) => {
+    speak(text, {
+      onStart: () => setVoiceState('playing'),
+      onEnd: () => setVoiceState('idle'),
+      onError: () => setVoiceState('idle')
+    })
   }, [])
 
-  const handleCapture = useCallback(() => {
-    if (analysisStatus === 'loading' || cameraStatus !== 'ready') return
-    const imageBase64 = capture()
-    if (!imageBase64) return
-    lastImageRef.current = imageBase64
-    runAnalysis(imageBase64, mode)
-  }, [analysisStatus, cameraStatus, capture, mode, runAnalysis])
+  const applyNarration = useCallback(
+    (text, variant) => {
+      if (text === lastTextRef.current) return
+      lastTextRef.current = text
+      setNarration({
+        text,
+        variant,
+        textDetected: variant !== 'error' && text.includes(TEXT_DETECTED_MARKER)
+      })
+      speakResult(text)
+    },
+    [speakResult]
+  )
 
-  const handleRetry = useCallback(() => {
-    if (lastImageRef.current && analysisStatus !== 'loading') {
-      runAnalysis(lastImageRef.current, mode)
+  const loopTick = useCallback(async () => {
+    if (!isActiveRef.current) return
+
+    if (cameraStatusRef.current !== 'ready') {
+      loopTimeoutRef.current = setTimeout(loopTick, CAMERA_NOT_READY_POLL_MS)
+      return
     }
-  }, [analysisStatus, mode, runAnalysis])
+
+    const imageBase64 = capture()
+    if (!imageBase64) {
+      loopTimeoutRef.current = setTimeout(loopTick, CAMERA_NOT_READY_POLL_MS)
+      return
+    }
+
+    try {
+      const text = await describeImage(imageBase64)
+      if (!isActiveRef.current) return
+
+      const isFailure = text === BACKEND_FALLBACK_TEXT
+      applyNarration(isFailure ? UI_ERROR_MESSAGE : text, isFailure ? 'error' : isHazardText(text) ? 'hazard' : 'normal')
+
+      loopTimeoutRef.current = setTimeout(loopTick, isFailure ? LOOP_ERROR_PAUSE_MS : LOOP_PAUSE_MS)
+    } catch (err) {
+      if (!isActiveRef.current) return
+      applyNarration(UI_ERROR_MESSAGE, 'error')
+      loopTimeoutRef.current = setTimeout(loopTick, LOOP_ERROR_PAUSE_MS)
+    }
+  }, [capture, applyNarration])
+
+  const handleToggle = useCallback(() => {
+    if (isActive) {
+      isActiveRef.current = false
+      setIsActive(false)
+      clearTimeout(loopTimeoutRef.current)
+      stopSpeaking()
+      setVoiceState('idle')
+      return
+    }
+
+    isActiveRef.current = true
+    setIsActive(true)
+    lastTextRef.current = null
+    loopTick()
+  }, [isActive, loopTick])
 
   const isCameraReady = cameraStatus === 'ready'
-  const isLoading = analysisStatus === 'loading'
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Chokh</h1>
-      </header>
+    <div className="app-bg">
+      <div className="app-shell">
+        <Hero />
 
-      <main className="app-main">
-        <div className="mode-switch" role="tablist" aria-label="মোড নির্বাচন">
-          {Object.entries(MODES).map(([key, { label }]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              className={`mode-tab ${mode === key ? 'mode-tab-active' : ''}`}
-              aria-selected={mode === key}
-              onClick={() => setMode(key)}
-              disabled={isLoading}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <VisionCamera videoRef={videoRef} status={cameraStatus} isActive={isActive} onRetry={retryCamera} />
 
-        <div className="camera-preview">
-          <video ref={videoRef} muted playsInline autoPlay className="camera-video" />
+        <VisionToggleButton isActive={isActive} onClick={handleToggle} disabled={!isCameraReady} />
 
-          {isCameraReady && (
-            <button
-              type="button"
-              className="camera-power-button"
-              onClick={turnOffCamera}
-              aria-label="ক্যামেরা বন্ধ করুন"
-            >
-              ⏻ বন্ধ করুন
-            </button>
-          )}
-
-          {!isCameraReady && (
-            <div className="camera-overlay">
-              <p>{CAMERA_MESSAGES[cameraStatus] ?? 'ক্যামেরা লোড হচ্ছে...'}</p>
-              {cameraStatus === 'off' && (
-                <button type="button" className="retry-button" onClick={turnOnCamera}>
-                  ক্যামেরা চালু করুন
-                </button>
-              )}
-              {(cameraStatus === 'denied' || cameraStatus === 'error') && (
-                <button type="button" className="retry-button" onClick={retryCamera}>
-                  আবার চেষ্টা করুন
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <button
-          type="button"
-          className="capture-button"
-          onClick={handleCapture}
-          disabled={!isCameraReady || isLoading}
-          aria-label={`ছবি তুলুন - ${MODES[mode].full}`}
-        >
-          {isLoading ? (
-            <span className="spinner" role="status" aria-live="polite" />
-          ) : (
-            <span className="capture-icon" aria-hidden="true">📷</span>
-          )}
-        </button>
-
-        <p className="hint">
-          {isLoading ? 'বোঝার চেষ্টা হচ্ছে...' : 'ছবি তুলতে বোতাম চাপুন'}
-        </p>
-
-        {resultText && (
-          <div
-            className={`result-box ${analysisStatus === 'error' ? 'result-error' : ''}`}
-            role="status"
-            aria-live="assertive"
-          >
-            <p>{resultText}</p>
-            <div className="result-actions">
-              <button type="button" className="speak-button" onClick={() => speak(resultText)}>
-                🔊 আবার শুনুন
-              </button>
-              {analysisStatus === 'error' && (
-                <button type="button" className="retry-button" onClick={handleRetry}>
-                  🔁 আবার চেষ্টা করুন
-                </button>
-              )}
-            </div>
-          </div>
+        {narration && (
+          <NarrationCard
+            text={narration.text}
+            variant={narration.variant}
+            textDetected={narration.textDetected}
+            isSpeaking={voiceState === 'playing'}
+          />
         )}
-      </main>
+
+        {voiceUnsupported && (
+          <p className="voice-error" role="status">
+            ভয়েস চালু করা যাচ্ছে না। লেখা দেখে চেষ্টা করুন।
+          </p>
+        )}
+      </div>
     </div>
   )
 }

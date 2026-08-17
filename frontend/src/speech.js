@@ -1,6 +1,6 @@
 // Single entry point for text-to-speech (browser SpeechSynthesis today). Swap the body of
 // speak() for a cloud TTS call later without touching any caller — App.jsx only ever imports
-// this function.
+// these functions.
 const PREFERRED_LANGS = ['bn-BD', 'bn-IN', 'en-US']
 
 function pickVoice(voices) {
@@ -15,13 +15,23 @@ function pickVoice(voices) {
   return voices[0] || null
 }
 
-export function speak(text) {
-  if (!('speechSynthesis' in window)) return
+export function isSpeechSupported() {
+  return 'speechSynthesis' in window
+}
+
+export function speak(text, { onStart, onEnd, onError } = {}) {
+  if (!isSpeechSupported()) {
+    onError?.()
+    return
+  }
 
   const synth = window.speechSynthesis
   synth.cancel()
 
   const utter = new SpeechSynthesisUtterance(text)
+  utter.onstart = () => onStart?.()
+  utter.onend = () => onEnd?.()
+  utter.onerror = () => onError?.()
 
   const applyVoiceAndSpeak = () => {
     const voices = synth.getVoices()
@@ -57,4 +67,10 @@ export function speak(text) {
     synth.onvoiceschanged = null
     applyVoiceAndSpeak()
   }, 500)
+}
+
+export function stopSpeaking() {
+  if (isSpeechSupported()) {
+    window.speechSynthesis.cancel()
+  }
 }

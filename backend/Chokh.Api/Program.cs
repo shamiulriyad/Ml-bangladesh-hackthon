@@ -4,11 +4,11 @@ using System.Text.Json.Serialization;
 using DotNetEnv;
 using Microsoft.OpenApi;
 
-const string ScenePrompt =
-    "তুমি Chokh, দৃষ্টিপ্রতিবন্ধী ব্যবহারকারীর জন্য একটি বাংলা ভাষার ভিজ্যুয়াল সহায়ক। ছবিটি দেখে শুধু বাংলায়, সর্বোচ্চ ২ থেকে ৪টি ছোট বাক্যে উত্তর দাও। এই ক্রম মেনে চলো: (১) প্রথমে বিপদ থাকলে তা বলো — যেমন গাড়ি, রিকশা, সিঁড়ি, গর্ত বা অন্য বাধা; (২) এরপর অবস্থান বলো এই শব্দগুলো ব্যবহার করে: সামনে, পেছনে, বাম পাশে, ডান পাশে, কাছাকাছি, দূরে; (৩) সবশেষে প্রয়োজনীয় বাড়তি তথ্য সংক্ষেপে বলো, যেমন মানুষ, দরজা বা রাস্তা। ছবিতে যা নেই তা কল্পনা করে বলবে না। নিশ্চিত না হলে স্পষ্টভাবে বলো \"নিশ্চিতভাবে বোঝা যাচ্ছে না\"। কোনো মেডিকেল পরামর্শ, রোগ নির্ণয় বা চিকিৎসা নির্দেশনা দিও না। অপ্রয়োজনীয় বর্ণনা, ভূমিকা, ইংরেজি অনুবাদ বা মার্কডাউন দিও না।";
-
-const string TextPrompt =
-    "তুমি Chokh, দৃষ্টিপ্রতিবন্ধী ব্যবহারকারীর জন্য ছবি থেকে লেখা পড়ে শোনাচ্ছ। ছবিতে থাকা বাংলা বা ইংরেজি লেখা — যেমন সাইনবোর্ড, ওষুধের প্যাকেট, লেবেল, মেনু বা কাগজপত্র — যতটা সম্ভব হুবহু পড়ো। ব্যাখ্যার চেয়ে সঠিক পাঠ্য transcription-কে অগ্রাধিকার দাও। শুধু বাংলায়, সর্বোচ্চ ২ থেকে ৪টি ছোট বাক্যে উত্তর দাও, যেমন: \"এখানে লেখা আছে: ...\"। কোনো মেডিকেল পরামর্শ, ডোজ পরিবর্তনের পরামর্শ বা রোগ নির্ণয় দিও না — শুধু যা লেখা আছে তা জানাও। কোনো লেখা স্পষ্ট দেখা না গেলে বলো \"নিশ্চিতভাবে বোঝা যাচ্ছে না\"। কোনো ভূমিকা বা মার্কডাউন দিও না।";
+// One unified prompt now covers both hazard/scene narration and opportunistic text reading —
+// the frontend no longer has a Scene/Read Text toggle; it's a single continuous vision loop
+// that calls this endpoint automatically every few seconds and speaks whatever comes back.
+const string VisionPrompt =
+    "তুমি Chokh, দৃষ্টিপ্রতিবন্ধী ব্যবহারকারীর জন্য একটি ক্রমাগত সক্রিয় বাংলা ভাষার AI চোখ। ব্যবহারকারীর ক্যামেরা এই মুহূর্তে যা দেখছে তা বিশ্লেষণ করে শুধু বাংলায়, সর্বোচ্চ ১ থেকে ২টি ছোট বাক্যে বলো। এই ক্রম মেনে চলো: (১) বিপদ থাকলে সবার আগে বলো — যেমন গাড়ি, রিকশা, সিঁড়ি, গর্ত বা বাধা; (২) এরপর সংক্ষেপে দিক ও গুরুত্বপূর্ণ বস্তু বলো এই শব্দ ব্যবহার করে: সামনে, পেছনে, বাম পাশে, ডান পাশে, কাছাকাছি, দূরে; (৩) ছবিতে স্পষ্ট পাঠযোগ্য লেখা (সাইনবোর্ড, লেবেল, প্যাকেট) থাকলে সংক্ষেপে পড়ে শোনাও, যেমন \"এখানে লেখা আছে: ...\"। ছবিতে যা নেই তা কল্পনা করে বলবে না। নিশ্চিত না হলে বলো \"নিশ্চিতভাবে বোঝা যাচ্ছে না\"। কোনো মেডিকেল পরামর্শ, রোগ নির্ণয় বা চিকিৎসা নির্দেশনা দিও না। কোনো ভূমিকা বা মার্কডাউন দিও না।";
 
 const string FallbackMessage = "দুঃখিত, এই মুহূর্তে বুঝতে পারছি না। আবার চেষ্টা করুন।";
 
@@ -51,8 +51,9 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Chokh API",
         Version = "v1",
-        Description = "Accessibility API for visually impaired users in Bangladesh — " +
-                       "describes a scene or reads text aloud from a photo using Gemini."
+        Description = "Accessibility API for visually impaired users in Bangladesh — powers " +
+                       "a continuous vision loop that describes hazards, spatial position, " +
+                       "and visible text from camera frames using Gemini."
     });
 });
 
@@ -80,8 +81,6 @@ app.MapPost("/api/describe", async (
         return Results.BadRequest(new { error = "imageBase64 is required" });
     }
 
-    var prompt = request.Mode == "text" ? TextPrompt : ScenePrompt;
-
     // Checks, in order: the GEMINI_API_KEY environment variable (used on Render), then
     // .NET user-secrets (used for local dev via `dotnet user-secrets set GEMINI_API_KEY ...`).
     var apiKey = configuration["GEMINI_API_KEY"];
@@ -99,7 +98,7 @@ app.MapPost("/api/describe", async (
             {
                 Parts = new List<GeminiPart>
                 {
-                    new() { Text = prompt },
+                    new() { Text = VisionPrompt },
                     new()
                     {
                         InlineData = new GeminiInlineData
@@ -114,7 +113,7 @@ app.MapPost("/api/describe", async (
         GenerationConfig = new GeminiGenerationConfig
         {
             Temperature = 0.3,
-            MaxOutputTokens = 150,
+            MaxOutputTokens = 100,
             ThinkingConfig = new GeminiThinkingConfig { ThinkingBudget = 0 }
         }
     };
@@ -163,11 +162,13 @@ app.MapPost("/api/describe", async (
 })
 .WithName("DescribeImage")
 .WithTags("Describe")
-.WithSummary("Describe a scene or read text aloud from a photo")
+.WithSummary("Describe one frame from the continuous vision loop")
 .WithDescription(
-    "Accepts a base64-encoded JPEG and a mode (\"scene\" or \"text\"), sends it to Gemini " +
-    "with the matching hardcoded Bengali prompt, and returns a short spoken-ready Bengali " +
-    "response. Falls back to a fixed Bengali message on any error or timeout (>8s).")
+    "Accepts a base64-encoded JPEG, sends it to Gemini with the hardcoded hazard-first " +
+    "Bengali vision prompt (which also opportunistically reads any visible text), and " +
+    "returns a short spoken-ready Bengali response. Called automatically every few seconds " +
+    "by the frontend's continuous vision loop. Falls back to a fixed Bengali message on any " +
+    "error or timeout (>8s).")
 .Produces<DescribeResponse>(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status400BadRequest);
 
@@ -180,7 +181,7 @@ static JsonSerializerOptions JsonOptions() => new()
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 };
 
-record DescribeRequest(string ImageBase64, string Mode);
+record DescribeRequest(string ImageBase64);
 
 record DescribeResponse(string Text);
 
