@@ -9,7 +9,7 @@ capture button to press.
   toggle — no capture button, no mode selector)
 - **Backend:** ASP.NET Core minimal API (also serves the built frontend as static files) —
   the only reason a backend exists at all is to keep `GEMINI_API_KEY` off the client
-- **AI:** Google Gemini (`gemini-2.5-flash`) for image understanding — overridable via the
+- **AI:** Google Gemini (`gemini-3.5-flash`) for image understanding — overridable via the
   `GEMINI_MODEL` environment variable
 - **Voice:** Browser `speechSynthesis` — no external TTS service, no API key needed for voice
 

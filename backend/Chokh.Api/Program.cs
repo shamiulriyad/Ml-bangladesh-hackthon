@@ -12,9 +12,12 @@ const string VisionPrompt =
 
 const string FallbackMessage = "দুঃখিত, এই মুহূর্তে বুঝতে পারছি না। আবার চেষ্টা করুন।";
 
-// gemini-flash-latest (resolving to gemini-3.7-flash) was hitting free-tier 429
-// RESOURCE_EXHAUSTED; pinned to gemini-2.5-flash instead. Overridable via GEMINI_MODEL.
-const string GeminiModelDefault = "gemini-2.5-flash";
+// gemini-flash-latest hit free-tier 429 RESOURCE_EXHAUSTED; gemini-2.5-flash and
+// gemini-2.5-flash-lite both 404 for this project ("no longer available to new users");
+// gemini-3.6-flash 400s regardless of the model name Google's own error suggested.
+// gemini-3.5-flash is the pinned, stable model confirmed working for this project/key.
+// Overridable via GEMINI_MODEL.
+const string GeminiModelDefault = "gemini-3.5-flash";
 
 // Loads a .env file for local dev only (searches this folder and parent folders, so a
 // .env at the repo root is picked up even though `dotnet run` executes from
