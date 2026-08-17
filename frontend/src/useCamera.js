@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-// status: 'requesting' | 'ready' | 'denied' | 'unsupported' | 'error'
+// status: 'requesting' | 'ready' | 'denied' | 'unsupported' | 'error' | 'off'
 export function useCamera() {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -42,6 +42,14 @@ export function useCamera() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const turnOff = useCallback(() => {
+    stop()
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setStatus('off')
+  }, [stop])
+
   // Downscales and JPEG-encodes the current video frame; returns raw base64 (no data-URL prefix).
   const capture = useCallback((maxDim = 1024, quality = 0.7) => {
     const video = videoRef.current
@@ -66,5 +74,5 @@ export function useCamera() {
     return canvas.toDataURL('image/jpeg', quality).split(',')[1]
   }, [])
 
-  return { videoRef, status, capture, retry: start }
+  return { videoRef, status, capture, retry: start, turnOff, turnOn: start }
 }

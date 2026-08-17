@@ -4,7 +4,8 @@ export const CAMERA_MESSAGES = {
   requesting: 'ক্যামেরা চালু হচ্ছে...',
   denied: 'ক্যামেরা ব্যবহার করার অনুমতি দিন।',
   unsupported: 'এই ব্রাউজারে ক্যামেরা সমর্থিত নয়।',
-  error: 'ক্যামেরা চালু করা যায়নি। আবার চেষ্টা করুন।'
+  error: 'ক্যামেরা চালু করা যায়নি। আবার চেষ্টা করুন।',
+  off: 'ক্যামেরা বন্ধ আছে।'
 }
 
 // Shown/spoken for any analysis failure, regardless of cause.

@@ -34,7 +34,14 @@ async function describeImage(imageBase64) {
 }
 
 export default function App() {
-  const { videoRef, status: cameraStatus, capture, retry: retryCamera } = useCamera()
+  const {
+    videoRef,
+    status: cameraStatus,
+    capture,
+    retry: retryCamera,
+    turnOff: turnOffCamera,
+    turnOn: turnOnCamera
+  } = useCamera()
 
   const [isActive, setIsActive] = useState(false)
   const [narration, setNarration] = useState(null) // { text, variant, textDetected }
@@ -115,13 +122,17 @@ export default function App() {
     }
   }, [capture, applyNarration])
 
+  const stopLoop = useCallback(() => {
+    isActiveRef.current = false
+    setIsActive(false)
+    clearTimeout(loopTimeoutRef.current)
+    stopSpeaking()
+    setVoiceState('idle')
+  }, [])
+
   const handleToggle = useCallback(() => {
     if (isActive) {
-      isActiveRef.current = false
-      setIsActive(false)
-      clearTimeout(loopTimeoutRef.current)
-      stopSpeaking()
-      setVoiceState('idle')
+      stopLoop()
       return
     }
 
@@ -129,7 +140,12 @@ export default function App() {
     setIsActive(true)
     lastTextRef.current = null
     loopTick()
-  }, [isActive, loopTick])
+  }, [isActive, loopTick, stopLoop])
+
+  const handleTurnOffCamera = useCallback(() => {
+    stopLoop()
+    turnOffCamera()
+  }, [stopLoop, turnOffCamera])
 
   const isCameraReady = cameraStatus === 'ready'
 
@@ -138,7 +154,14 @@ export default function App() {
       <div className="app-shell">
         <Hero />
 
-        <VisionCamera videoRef={videoRef} status={cameraStatus} isActive={isActive} onRetry={retryCamera} />
+        <VisionCamera
+          videoRef={videoRef}
+          status={cameraStatus}
+          isActive={isActive}
+          onRetry={retryCamera}
+          onTurnOff={handleTurnOffCamera}
+          onTurnOn={turnOnCamera}
+        />
 
         <VisionToggleButton isActive={isActive} onClick={handleToggle} disabled={!isCameraReady} />
 
