@@ -1,0 +1,225 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: 'Noto Sans Bengali', 'Segoe UI', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+}
+
+.app-header {
+  width: 100%;
+  text-align: center;
+  padding: 20px 0 8px;
+}
+
+.app-header h1 {
+  font-size: 2rem;
+  letter-spacing: 0.05em;
+  color: #ffd60a;
+  margin: 0;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0 40px;
+}
+
+.mode-switch {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  background: #1c1c1e;
+  border: 2px solid #333;
+  border-radius: 16px;
+  padding: 6px;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 14px 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: transparent;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.mode-tab-active {
+  background: #ffd60a;
+  color: #000;
+}
+
+.mode-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.camera-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: #111;
+  border: 2px solid #333;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-power-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.camera-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 1.15rem;
+}
+
+.capture-button {
+  width: min(38vw, 160px);
+  height: min(38vw, 160px);
+  border-radius: 50%;
+  background: #ffd60a;
+  color: #000;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 0 8px rgba(255, 214, 10, 0.15);
+}
+
+.capture-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.capture-icon {
+  font-size: 3rem;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 6px solid rgba(0, 0, 0, 0.2);
+  border-top-color: #000;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hint {
+  font-size: 1.15rem;
+  text-align: center;
+  min-height: 1.4em;
+  margin: 0;
+}
+
+.result-box {
+  width: 100%;
+  background: #1c1c1e;
+  border: 2px solid #ffd60a;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.result-box p {
+  font-size: 1.4rem;
+  line-height: 1.5;
+  text-align: center;
+  margin: 0 0 16px;
+}
+
+.result-error {
+  border-color: #ff453a;
+}
+
+.result-error p {
+  color: #ff453a;
+}
+
+.result-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.speak-button,
+.retry-button {
+  flex: 1;
+  padding: 14px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.speak-button {
+  background: #ffd60a;
+  color: #000;
+  border: none;
+}
+
+.retry-button {
+  background: transparent;
+  color: #ff453a;
+  border: 2px solid #ff453a;
+}
+
+.camera-overlay .retry-button {
+  flex: none;
+  padding: 12px 24px;
+}
