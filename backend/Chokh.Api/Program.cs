@@ -12,12 +12,9 @@ const string VisionPrompt =
 
 const string FallbackMessage = "দুঃখিত, এই মুহূর্তে বুঝতে পারছি না। আবার চেষ্টা করুন।";
 
-// gemini-2.0-flash and pinned gemini-2.5-flash* are both retired for new API keys as of this
-// writing; gemini-flash-latest is the alias Google keeps pointed at whatever flash model is
-// currently live (resolves to gemini-3.7-flash today), so it won't break again the next time
-// a specific version is sunset.
-const string GeminiEndpoint =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+// gemini-flash-latest (resolving to gemini-3.7-flash) was hitting free-tier 429
+// RESOURCE_EXHAUSTED; pinned to gemini-2.5-flash instead. Overridable via GEMINI_MODEL.
+const string GeminiModelDefault = "gemini-2.5-flash";
 
 // Loads a .env file for local dev only (searches this folder and parent folders, so a
 // .env at the repo root is picked up even though `dotnet run` executes from
@@ -140,9 +137,17 @@ app.MapPost("/api/describe", async (
     var client = httpClientFactory.CreateClient();
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
 
+    var geminiModel = configuration["GEMINI_MODEL"];
+    if (string.IsNullOrWhiteSpace(geminiModel))
+    {
+        geminiModel = GeminiModelDefault;
+    }
+    var geminiEndpoint =
+        $"https://generativelanguage.googleapis.com/v1beta/models/{geminiModel}:generateContent";
+
     try
     {
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, GeminiEndpoint);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, geminiEndpoint);
         httpRequest.Headers.Add("x-goog-api-key", apiKey);
         httpRequest.Content = JsonContent.Create(geminiRequest, options: JsonOptions());
 
