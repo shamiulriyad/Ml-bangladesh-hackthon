@@ -129,13 +129,17 @@ In a separate terminal:
 
 ```bash
 cd frontend
+cp .env.example .env      # then edit VITE_API_URL to http://localhost:8080
 npm install
 npm run dev
 ```
 
-Vite serves the app on `http://localhost:5173` and proxies `/api/*` requests to
-`http://localhost:8080` (see `frontend/vite.config.js`), so the backend must be running
-first.
+Vite serves the app on `http://localhost:5173`. The frontend calls the backend at whatever
+`VITE_API_URL` points to (see `frontend/.env.example`) — for local dev that's your locally
+running backend at `http://localhost:8080`, so start the backend first. There's no dev-server
+proxy for `/api/*` (Vite's `preview` command inherits `server.proxy`, which would leak a
+`localhost` target into production — see the comment in `frontend/vite.config.js`), so
+`VITE_API_URL` is the single source of truth in every environment, local and deployed alike.
 
 Open `http://localhost:5173` on a phone (or a desktop browser with a webcam) to try it.
 `getUserMedia` requires HTTPS or `localhost` — that's satisfied automatically in dev and by
@@ -143,6 +147,11 @@ Render in production. On a phone, prefer the rear (environment-facing) camera; t
 requests it via `facingMode: "environment"` but falls back to whatever camera is available.
 
 ### 3. Running the combined production build locally (optional)
+
+This mirrors the single-service Render deployment (frontend + backend, same origin), so
+leave `VITE_API_URL` **unset** for this build — the relative `/api/describe` path already
+works when both are served from `:8080` together. If you have a `frontend/.env` left over
+from step 2, remove or comment out `VITE_API_URL` in it before building here.
 
 ```bash
 cd frontend && npm run build && cd ..
@@ -157,10 +166,19 @@ like production.
 
 ## Environment variables
 
-| Variable         | Required | Default | Notes                                                        |
-|------------------|----------|---------|----------------------------------------------------------------|
-| `GEMINI_API_KEY` | Yes      | —       | Never sent to the frontend; read only on the backend.         |
-| `PORT`           | No       | `8080`  | Port the backend (and Render) listens on.                     |
+**Backend:**
+
+| Variable          | Required | Default | Notes                                                                 |
+|-------------------|----------|---------|------------------------------------------------------------------------|
+| `GEMINI_API_KEY`  | Yes      | —       | Never sent to the frontend; read only on the backend.                 |
+| `PORT`            | No       | `8080`  | Port the backend (and Render) listens on.                             |
+| `FRONTEND_ORIGIN` | Only if frontend and backend are separate services | — (CORS disabled) | The frontend's exact origin (e.g. `https://chokh.onrender.com`), enabling CORS for it. Comma-separate multiple origins. Not needed in the single combined-service deployment, since same-origin requests don't need CORS. |
+
+**Frontend** (only relevant if the frontend is deployed as its own service, separate from the backend — see [Deploying to Render](#deploying-to-render)):
+
+| Variable       | Required | Default                | Notes                                                            |
+|----------------|----------|-------------------------|-------------------------------------------------------------------|
+| `VITE_API_URL` | Only for a separate frontend deployment | unset (relative `/api/...`) | The backend's full URL, no trailing slash. Baked in at **build time** — changing it requires a rebuild, not just a restart. Never put secrets in a `VITE_`-prefixed variable; it ends up in the client-side bundle. |
 
 ## Deploying to Render
 
