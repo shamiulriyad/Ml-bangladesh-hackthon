@@ -15,11 +15,18 @@ const LOOP_PAUSE_MS = 2500
 const LOOP_ERROR_PAUSE_MS = 4000
 const CAMERA_NOT_READY_POLL_MS = 1000
 
+// Set at build time. When the frontend and backend are ONE deployed service (same origin),
+// leave this unset and the relative /api/describe path below just works. When they're two
+// separate services (e.g. two Render web services), set VITE_API_URL to the backend's full
+// origin, e.g. https://chokh-backend.onrender.com — Vite only exposes env vars prefixed
+// with VITE_ to the client bundle.
+const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? ''
+
 async function describeImage(imageBase64) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    const res = await fetch('/api/describe', {
+    const res = await fetch(`${API_BASE_URL}/api/describe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageBase64 }),

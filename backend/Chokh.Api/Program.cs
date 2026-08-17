@@ -44,6 +44,24 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 builder.Services.AddHttpClient();
 
+// Only needed when the frontend is deployed as a separate origin from this backend (e.g. two
+// Render services). Same-origin deployments (frontend built into this app's wwwroot) don't
+// need CORS at all and FRONTEND_ORIGIN can be left unset. Comma-separate multiple origins.
+const string CorsPolicyName = "frontend";
+var allowedOrigins = (Environment.GetEnvironmentVariable("FRONTEND_ORIGIN") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(CorsPolicyName, policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+        }
+    });
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -67,6 +85,7 @@ app.UseSwaggerUI(options =>
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseCors(CorsPolicyName);
 
 app.MapPost("/api/describe", async (
     DescribeRequest request,
