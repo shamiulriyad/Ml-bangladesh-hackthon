@@ -70,6 +70,8 @@ written to make Gemini:
 └── README.md
 ```
 
+<img width="474" height="411" alt="image" src="https://github.com/user-attachments/assets/95dfc2e9-9328-45f0-86ba-dc131bb2fdb5" />
+
 ## Prerequisites
 
 - Node.js 20+
